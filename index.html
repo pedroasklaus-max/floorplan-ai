@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>FloorPlan-AI Web</title>
+<style>
+  body { font-family: Arial; margin: 20px; }
+  textarea { width: 100%; height: 200px; }
+  #svgOut { border: 1px solid #000; margin-top: 20px; }
+</style>
+</head>
+<body>
+<h1>FloorPlan-AI (Rodando no Navegador)</h1>
+<p>Cole o JSON abaixo e clique em "Gerar Planta". O SVG será exibido na tela sem precisar instalar nada.</p>
+
+<textarea id="jsonInput">{
+  "max_width_m": 12,
+  "rooms": [
+    {"name":"Sala","w_m":4.0,"h_m":5.0},
+    {"name":"Cozinha","w_m":3.5,"h_m":3.0},
+    {"name":"Suíte","w_m":4.0,"h_m":4.0},
+    {"name":"Quarto 2","w_m":3.0,"h_m":3.0},
+    {"name":"Banheiro","w_m":2.0,"h_m":2.5}
+  ],
+  "scale_px_per_m": 100,
+  "wall_thickness_m": 0.15
+}</textarea>
+<br />
+<button onclick="generate()">Gerar Planta</button>
+
+<div id="svgOut"></div>
+
+<script>
+function generate(){
+  const cfg = JSON.parse(document.getElementById('jsonInput').value);
+  const rooms = cfg.rooms;
+  const maxWidth = cfg.max_width_m || 12;
+  const scale = cfg.scale_px_per_m || 100;
+  const wall = cfg.wall_thickness_m || 0.15;
+  const spacing = 0.2;
+
+  let sorted = [...rooms].sort((a,b)=> (b.w_m*b.h_m)-(a.w_m*a.h_m));
+  let lines=[];
+  for (let r of sorted){
+    let placed=false;
+    for (let line of lines){
+      let lw = line.rooms.reduce((s,it)=> s+it.w_m+spacing,0);
+      if(lw + r.w_m <= maxWidth){
+        let rc = {...r, x: lw, y: line.y};
+        line.rooms.push(rc);
+        placed=true; break;
+      }
+    }
+    if(!placed){
+      let y = lines.reduce((s,line)=> s + Math.max(...line.rooms.map(rr=>rr.h_m)) + spacing,0);
+      let rc = {...r, x:0, y:y};
+      lines.push({y:y, rooms:[rc]});
+    }
+  }
+
+  let placedRooms = lines.flatMap(l=>l.rooms);
+
+  let maxX=0, maxY=0;
+  for(let r of placedRooms){
+    maxX = Math.max(maxX, r.x + r.w_m);
+    maxY = Math.max(maxY, r.y + r.h_m);
+  }
+  const margin = 0.5;
+  const width_m = maxX + margin*2;
+  const height_m = maxY + margin*2;
+  const W = width_m * scale;
+  const H = height_m * scale;
+  const margin_px = margin * scale;
+  const wall_px = wall * scale;
+
+  let svg = [];
+  svg.push(`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns='http://www.w3.org/2000/svg'>`);
+  svg.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>`);
+
+  for(let r of placedRooms){
+    let x = margin_px + r.x*scale;
+    let y = margin_px + r.y*scale;
+    let rw = r.w_m*scale;
+    let rh = r.h_m*scale;
+    svg.push(`<rect x='${x}' y='${y}' width='${rw}' height='${rh}' fill='none' stroke='black' stroke-width='${wall_px}'/>`);
+    svg.push(`<text x='${x+rw/2}' y='${y+rh/2}' text-anchor='middle' font-size='14'>${r.name}</text>`);
+  }
+
+  svg.push(`</svg>`);
+
+  document.getElementById('svgOut').innerHTML = svg.join('\n');
+}
+</script>
+</body>
+</html>
